@@ -6,6 +6,7 @@ add_library(soundscape_audio SHARED
     jni_bridge.cpp
     flac_jni_decoder.cpp
     alac_jni_decoder.cpp
+    wavpack_jni_decoder.cpp
     flac/src/bitmath.c
     flac/src/bitreader.c
     flac/src/cpu.c
@@ -23,9 +24,19 @@ add_library(soundscape_audio SHARED
     alac/ag_dec.c
     alac/dp_dec.c
     alac/matrix_dec.c
+    wavpack/src/common_utils.c
+    wavpack/src/decorr_utils.c
+    wavpack/src/entropy_utils.c
+    wavpack/src/open_utils.c
+    wavpack/src/open_filename.c
+    wavpack/src/read_words.c
+    wavpack/src/unpack.c
+    wavpack/src/unpack_floats.c
+    wavpack/src/unpack_seek.c
+    wavpack/src/unpack_utils.c
 )
 
-target_include_directories(soundscape_audio PRIVATE flac/include alac)
+target_include_directories(soundscape_audio PRIVATE flac/include alac wavpack/include wavpack/src)
 
 # libFLAC compiles with no config.h present (all HAVE_* / FLAC__HAS_OGG
 # checks fall back safely to "off" when undefined — see README for the
@@ -60,5 +71,9 @@ set_source_files_properties(
     flac/src/md5.c flac/src/memory.c flac/src/stream_decoder.c
     alac/ALACBitUtilities.c alac/ALACDecoder.cpp alac/EndianPortable.c
     alac/ag_dec.c alac/dp_dec.c alac/matrix_dec.c
+    wavpack/src/common_utils.c wavpack/src/decorr_utils.c wavpack/src/entropy_utils.c
+    wavpack/src/open_utils.c wavpack/src/open_filename.c wavpack/src/read_words.c
+    wavpack/src/unpack.c wavpack/src/unpack_floats.c wavpack/src/unpack_seek.c
+    wavpack/src/unpack_utils.c
     PROPERTIES COMPILE_FLAGS "-w"
 )

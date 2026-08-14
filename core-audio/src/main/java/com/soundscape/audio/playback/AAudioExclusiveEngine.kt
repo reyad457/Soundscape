@@ -38,6 +38,7 @@ class AAudioExclusiveEngine @Inject constructor(
     private val mediaCodecDecoder = PcmDecoder(context)
     private val flacDecoder = FlacNativeDecoder(context)
     private val alacDecoder = AlacNativeDecoder(context)
+    private val wavpackDecoder = WavpackNativeDecoder(context)
 
     private val _state = MutableStateFlow(PlaybackState())
     override val state: StateFlow<PlaybackState> = _state
@@ -92,6 +93,15 @@ class AAudioExclusiveEngine @Inject constructor(
                         flacDecoder.decode(uri = Uri.parse(track.uri), scope = this, onFormatKnown = onFormat)
                     AudioFormat.ALAC ->
                         alacDecoder.decode(uri = Uri.parse(track.uri), scope = this, onFormatKnown = onFormat)
+                    AudioFormat.WAVPACK ->
+                        try {
+                            wavpackDecoder.decode(uri = Uri.parse(track.uri), scope = this, onFormatKnown = onFormat)
+                        } catch (e: IllegalStateException) {
+                            // Hybrid/lossy .wv files are rejected by design at the native layer
+                            // (see wavpack_jni_decoder.cpp) — fall back immediately rather than
+                            // waiting on PlaybackEngineRouter's 2s exclusive-mode timeout.
+                            mediaCodecDecoder.decode(uri = Uri.parse(track.uri), scope = this, onFormatKnown = onFormat)
+                        }
                     else ->
                         mediaCodecDecoder.decode(uri = Uri.parse(track.uri), scope = this, onFormatKnown = onFormat)
                 }
