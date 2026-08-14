@@ -11,7 +11,16 @@ bool OboeEngine::open(int32_t sampleRate, int32_t channelCount, int32_t bitsPerS
     oboe::AudioFormat format = (bitsPerSample > 16)
         ? oboe::AudioFormat::Float   // >16-bit sources are staged as float by the Kotlin decode layer
         : oboe::AudioFormat::I16;
+    return openInternal(sampleRate, channelCount, deviceId, format);
+}
 
+bool OboeEngine::openDop(int32_t sampleRate, int32_t channelCount, int32_t deviceId) {
+    // I32, never Float — see the header kdoc on why DoP can't take the
+    // Float branch open() uses for other >16-bit sources.
+    return openInternal(sampleRate, channelCount, deviceId, oboe::AudioFormat::I32);
+}
+
+bool OboeEngine::openInternal(int32_t sampleRate, int32_t channelCount, int32_t deviceId, oboe::AudioFormat format) {
     oboe::AudioStreamBuilder builder;
     builder.setDirection(oboe::Direction::Output)
         ->setPerformanceMode(oboe::PerformanceMode::LowLatency)
@@ -62,6 +71,32 @@ void OboeEngine::close() {
         stream_.reset();
     }
     exclusiveGranted_ = false;
+}
+
+bool OboeEngine::pause() {
+    // Deliberately NOT close(): keeps the exclusive-mode stream (and its
+    // hardware/driver claim on the DAC) alive across pause. Blocking
+    // write() calls against a paused stream will simply block once its
+    // buffer fills, which naturally throttles the Kotlin decode loop
+    // without it needing to know pause happened — see
+    // AAudioExclusiveEngine.pause()'s kdoc for the Kotlin side of this.
+    if (!stream_) return false;
+    oboe::Result result = stream_->requestPause();
+    if (result != oboe::Result::OK) {
+        LOGW("pause() failed: %s", oboe::convertToText(result));
+        return false;
+    }
+    return true;
+}
+
+bool OboeEngine::resumeStream() {
+    if (!stream_) return false;
+    oboe::Result result = stream_->requestStart();
+    if (result != oboe::Result::OK) {
+        LOGW("resume() failed: %s", oboe::convertToText(result));
+        return false;
+    }
+    return true;
 }
 
 int32_t OboeEngine::getActualSampleRate() const {

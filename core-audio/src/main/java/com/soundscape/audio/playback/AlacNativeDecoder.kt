@@ -15,13 +15,16 @@ import java.nio.ByteBuffer
  * actual sample decoding, bypassing whatever ALAC support the platform's
  * own MediaCodec may or may not have.
  *
- * Matches [PcmDecoder]/[FlacNativeDecoder]'s producer-channel contract.
+ * Matches [PcmDecoder]/[FlacNativeDecoder]'s producer-channel contract,
+ * including [startPositionMs] seek support (MediaExtractor#seekTo — same
+ * mechanism [PcmDecoder] uses, since both are MediaExtractor-based).
  */
 class AlacNativeDecoder(private val context: Context) {
 
     suspend fun decode(
         uri: Uri,
         scope: ProducerScope<PcmDecoder.DecodedChunk>,
+        startPositionMs: Long = 0,
         onFormatKnown: (PcmDecoder.DecodedFormat) -> Unit
     ) {
         val extractor = MediaExtractor()
@@ -32,6 +35,9 @@ class AlacNativeDecoder(private val context: Context) {
         } ?: throw IllegalArgumentException("No ALAC track found in $uri")
 
         extractor.selectTrack(trackIndex)
+        if (startPositionMs > 0) {
+            extractor.seekTo(startPositionMs * 1000, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
+        }
         val format = extractor.getTrackFormat(trackIndex)
 
         val magicCookie = format.getByteBuffer("csd-0")

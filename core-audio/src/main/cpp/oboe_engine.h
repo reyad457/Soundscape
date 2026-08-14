@@ -20,13 +20,28 @@ namespace soundscape {
 class OboeEngine {
 public:
     bool open(int32_t sampleRate, int32_t channelCount, int32_t bitsPerSample, int32_t deviceId);
+
+    /**
+     * Opens specifically for DoP (DSD-over-PCM): Oboe's I32 format, no
+     * float/Int16 branching like open() does — DoP's marker bytes must
+     * survive completely bit-exact, and float conversion is lossy by
+     * construction, so this path can never go through open()'s Float
+     * branch even though DoP nominally carries "24-bit" data.
+     */
+    bool openDop(int32_t sampleRate, int32_t channelCount, int32_t deviceId);
+
     int32_t write(const uint8_t* pcmData, int32_t numFrames);
     void close();
+
+    bool pause();
+    bool resumeStream();
 
     int32_t getActualSampleRate() const;
     bool isExclusiveModeActive() const;
 
 private:
+    bool openInternal(int32_t sampleRate, int32_t channelCount, int32_t deviceId, oboe::AudioFormat format);
+
     std::shared_ptr<oboe::AudioStream> stream_;
     bool exclusiveGranted_ = false;
 };

@@ -87,11 +87,12 @@ class MediaStoreScanner @Inject constructor(
         tracks
     }
 
-    private fun formatFromMime(mime: String?): AudioFormat = when (mime) {
-        "audio/flac", "audio/x-flac" -> AudioFormat.FLAC
+    private fun formatFromMime(mime: String?): AudioFormat = when (mime) {        "audio/flac", "audio/x-flac" -> AudioFormat.FLAC
         "audio/alac" -> AudioFormat.ALAC
         "audio/x-wavpack", "audio/wavpack" -> AudioFormat.WAVPACK
         "audio/x-ape", "audio/ape" -> AudioFormat.APE
+        "audio/x-dsf" -> AudioFormat.DSF
+        "audio/x-dff", "audio/x-dsd" -> AudioFormat.DFF
         "audio/x-wav", "audio/wav" -> AudioFormat.WAV
         "audio/mpeg" -> AudioFormat.MP3
         "audio/mp4", "audio/aac" -> AudioFormat.AAC
@@ -109,6 +110,15 @@ class MediaStoreScanner @Inject constructor(
     // native ALAC decoder. Real fix: open each "audio/mp4" candidate with
     // MediaExtractor during scan and check its actual track MIME — costs
     // scan time, worth doing once Phase 2 needs to be reliable end to end.
+    //
+    // Caveat (DSD): this MediaStore query (IS_MUSIC != 0) is likely to
+    // miss .dsf/.dff files entirely on many devices — DSD isn't in most
+    // OEM media scanners' recognized-extension list the way FLAC/MP3 are,
+    // so MediaStore may never even offer these files to this query,
+    // regardless of DsdDopDecoder working correctly once a track record
+    // exists. A dedicated filesystem/SAF-based scan for .dsf/.dff would
+    // be needed to reliably surface them — not done here; this scanner
+    // stays MediaStore-only for now.
 
     private fun android.database.Cursor.getIntOrNull(col: Int): Int? =
         if (isNull(col)) null else getInt(col)

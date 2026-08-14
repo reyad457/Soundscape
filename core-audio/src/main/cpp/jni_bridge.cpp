@@ -20,6 +20,28 @@ Java_com_soundscape_audio_nativebridge_AAudioBridge_openStream(
     return opened ? JNI_TRUE : JNI_FALSE;
 }
 
+JNIEXPORT jboolean JNICALL
+Java_com_soundscape_audio_nativebridge_AAudioBridge_openDopStream(
+    JNIEnv* env, jobject /* this */,
+    jint sampleRate, jint channelCount, jint usbDeviceId) {
+
+    g_engine = std::make_unique<soundscape::OboeEngine>();
+    bool opened = g_engine->openDop(sampleRate, channelCount, usbDeviceId);
+    return opened ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_soundscape_audio_nativebridge_AAudioBridge_pauseStream(
+    JNIEnv* env, jobject /* this */) {
+    return (g_engine && g_engine->pause()) ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_soundscape_audio_nativebridge_AAudioBridge_resumeStream(
+    JNIEnv* env, jobject /* this */) {
+    return (g_engine && g_engine->resumeStream()) ? JNI_TRUE : JNI_FALSE;
+}
+
 JNIEXPORT jint JNICALL
 Java_com_soundscape_audio_nativebridge_AAudioBridge_writeFrames(
     JNIEnv* env, jobject /* this */, jbyteArray pcm, jint frameCount) {

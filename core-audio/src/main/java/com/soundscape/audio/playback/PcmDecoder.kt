@@ -23,6 +23,11 @@ import java.nio.ByteBuffer
  * format-specific decoders (libFLAC, libwavpack, etc.) in Phase 2 are for —
  * this MediaCodec path is the Phase 1 stopgap that already covers
  * FLAC/WAV/ALAC/AAC/MP3/Opus reasonably well on modern Android.
+ *
+ * [startPositionMs] gives real seek for every format this decoder
+ * handles — MediaExtractor#seekTo does the work. The native FLAC/
+ * WavPack/APE decoders don't have the equivalent wired yet; see
+ * AAudioExclusiveEngine.seekTo's kdoc for that gap.
  */
 class PcmDecoder(private val context: Context) {
 
@@ -37,6 +42,7 @@ class PcmDecoder(private val context: Context) {
     suspend fun decode(
         uri: Uri,
         scope: ProducerScope<DecodedChunk>,
+        startPositionMs: Long = 0,
         onFormatKnown: (DecodedFormat) -> Unit
     ) {
         val extractor = MediaExtractor()
@@ -47,6 +53,9 @@ class PcmDecoder(private val context: Context) {
         } ?: throw IllegalArgumentException("No audio track found in $uri")
 
         extractor.selectTrack(trackIndex)
+        if (startPositionMs > 0) {
+            extractor.seekTo(startPositionMs * 1000, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
+        }
         val inputFormat = extractor.getTrackFormat(trackIndex)
         val mime = inputFormat.getString(MediaFormat.KEY_MIME)!!
 
