@@ -28,7 +28,9 @@ data class PlayableTrack(
     val id: Long,
     val uri: String,
     val title: String,
-    val artist: String
+    val artist: String,
+    /** Null when unknown — engines that care (AAudioExclusiveEngine) fall back to sniffing by extension. */
+    val format: com.soundscape.library.model.AudioFormat? = null
 )
 
 data class PlaybackState(

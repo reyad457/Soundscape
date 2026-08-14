@@ -47,7 +47,8 @@ class HomeViewModel @Inject constructor(
                 id = track.id,
                 uri = track.sourceUri,
                 title = track.title,
-                artist = track.artist
+                artist = track.artist,
+                format = track.format
             )
         )
     }

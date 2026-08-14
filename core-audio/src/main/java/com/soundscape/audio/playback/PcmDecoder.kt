@@ -61,6 +61,8 @@ class PcmDecoder(private val context: Context) {
         val bufferInfo = MediaCodec.BufferInfo()
         var inputDone = false
         var formatReported = false
+        var bytesPerSample = 2  // updated once the real output format is known
+        var channelCount = 1
 
         try {
             while (scope.isActive) {
@@ -84,13 +86,17 @@ class PcmDecoder(private val context: Context) {
                     outIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
                         if (!formatReported) {
                             val outFormat = codec.outputFormat
+                            channelCount = outFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
+                            val isFloat = runCatching {
+                                outFormat.getInteger(MediaFormat.KEY_PCM_ENCODING)
+                            }.getOrDefault(AudioFormat.ENCODING_PCM_16BIT) == AudioFormat.ENCODING_PCM_FLOAT
+                            bytesPerSample = if (isFloat) 4 else 2
+
                             onFormatKnown(
                                 DecodedFormat(
                                     sampleRateHz = outFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE),
-                                    channelCount = outFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT),
-                                    actualEncodingIsFloat = runCatching {
-                                        outFormat.getInteger(MediaFormat.KEY_PCM_ENCODING)
-                                    }.getOrDefault(AudioFormat.ENCODING_PCM_16BIT) == AudioFormat.ENCODING_PCM_FLOAT
+                                    channelCount = channelCount,
+                                    actualEncodingIsFloat = isFloat
                                 )
                             )
                             formatReported = true
@@ -102,9 +108,10 @@ class PcmDecoder(private val context: Context) {
                             val chunk = ByteArray(bufferInfo.size)
                             outputBuffer.position(bufferInfo.offset)
                             outputBuffer.get(chunk)
-                            // Frame count assumes 4 bytes/sample (float) * channels; the caller
-                            // only uses this once actualEncodingIsFloat has been confirmed true.
-                            scope.send(DecodedChunk(chunk, chunk.size))
+                            // frameCount is real audio frames (samples per channel), matching
+                            // FlacNativeDecoder's DecodedChunk contract — not a byte count.
+                            val frameCount = chunk.size / (bytesPerSample * channelCount)
+                            scope.send(DecodedChunk(chunk, frameCount))
                         }
                         codec.releaseOutputBuffer(outIndex, false)
                         if (bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) {

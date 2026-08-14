@@ -3,6 +3,7 @@ package com.soundscape.audio.playback
 import android.content.Context
 import android.net.Uri
 import com.soundscape.audio.nativebridge.AAudioBridge
+import com.soundscape.library.model.AudioFormat
 import com.soundscape.usb.UsbAudioManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -34,7 +35,8 @@ class AAudioExclusiveEngine @Inject constructor(
 
     private val engineScope = CoroutineScope(Dispatchers.IO + Job())
     private var playbackJob: Job? = null
-    private val decoder = PcmDecoder(context)
+    private val mediaCodecDecoder = PcmDecoder(context)
+    private val flacDecoder = FlacNativeDecoder(context)
 
     private val _state = MutableStateFlow(PlaybackState())
     override val state: StateFlow<PlaybackState> = _state
@@ -58,38 +60,43 @@ class AAudioExclusiveEngine @Inject constructor(
                                  // the remaining piece, tracked for the Phase 1 follow-up pass.
 
             val chunks = produce(capacity = 8) {
-                decoder.decode(
-                    uri = Uri.parse(track.uri),
-                    scope = this,
-                    onFormatKnown = { format ->
-                        val opened = AAudioBridge.openStream(
-                            sampleRate = format.sampleRateHz,
-                            channelCount = format.channelCount,
-                            bitsPerSample = if (format.actualEncodingIsFloat) 32 else 16,
-                            usbDeviceId = usbDeviceId
+                val useNativeFlac = track.format == AudioFormat.FLAC
+                val onFormat: (PcmDecoder.DecodedFormat) -> Unit = { format ->
+                    val opened = AAudioBridge.openStream(
+                        sampleRate = format.sampleRateHz,
+                        channelCount = format.channelCount,
+                        bitsPerSample = if (format.actualEncodingIsFloat) 32 else 16,
+                        usbDeviceId = usbDeviceId
+                    )
+                    streamOpen = opened
+
+                    val exclusive = opened && AAudioBridge.isExclusiveMode()
+                    val actualRate = if (opened) AAudioBridge.getActualSampleRate() else 0
+                    val noResample = actualRate == format.sampleRateHz
+
+                    _state.update {
+                        it.copy(
+                            isPlaying = opened,
+                            activeSampleRateHz = actualRate.takeIf { r -> r > 0 },
+                            activeBitDepth = if (format.actualEncodingIsFloat) 32 else 16,
+                            // FLAC via libFLAC is a stronger bit-perfect claim than MediaCodec's
+                            // best-effort float request — but the badge still requires exclusive
+                            // mode AND no resampling regardless of which decoder produced the PCM.
+                            isBitPerfectConfirmed = exclusive && noResample && usbDevice != null
                         )
-                        streamOpen = opened
-
-                        val exclusive = opened && AAudioBridge.isExclusiveMode()
-                        val actualRate = if (opened) AAudioBridge.getActualSampleRate() else 0
-                        val noResample = actualRate == format.sampleRateHz
-
-                        _state.update {
-                            it.copy(
-                                isPlaying = opened,
-                                activeSampleRateHz = actualRate.takeIf { r -> r > 0 },
-                                activeBitDepth = if (format.actualEncodingIsFloat) 32 else 16,
-                                isBitPerfectConfirmed = exclusive && noResample && usbDevice != null
-                            )
-                        }
                     }
-                )
+                }
+
+                if (useNativeFlac) {
+                    flacDecoder.decode(uri = Uri.parse(track.uri), scope = this, onFormatKnown = onFormat)
+                } else {
+                    mediaCodecDecoder.decode(uri = Uri.parse(track.uri), scope = this, onFormatKnown = onFormat)
+                }
             }
 
             for (chunk in chunks) {
                 if (!streamOpen) continue
-                val frameCount = chunk.frameCount / 4 // float32 mono-equivalent frame size; see note below
-                AAudioBridge.writeFrames(chunk.bytes, frameCount)
+                AAudioBridge.writeFrames(chunk.bytes, chunk.frameCount)
             }
 
             AAudioBridge.closeStream()
