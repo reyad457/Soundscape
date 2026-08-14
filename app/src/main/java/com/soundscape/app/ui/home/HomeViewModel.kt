@@ -2,6 +2,8 @@ package com.soundscape.app.ui.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import android.net.Uri
+import com.soundscape.analysis.FidelityScanner
 import com.soundscape.audio.playback.PlayableTrack
 import com.soundscape.audio.playback.PlaybackEngine
 import com.soundscape.audio.playback.PlaybackState
@@ -25,7 +27,8 @@ class HomeViewModel @Inject constructor(
     private val trackDao: TrackDao,
     private val playbackEngine: PlaybackEngine,
     private val usbAudioManager: UsbAudioManager,
-    private val eq: ParametricEq
+    private val eq: ParametricEq,
+    private val fidelityScanner: FidelityScanner
 ) : ViewModel() {
 
     val tracks: StateFlow<List<Track>> = trackDao.observeAll()
@@ -38,7 +41,41 @@ class HomeViewModel @Inject constructor(
     private val eqPresetState = MutableStateFlow(ParametricEq.Preset.FLAT)
     val activeEqPreset: StateFlow<ParametricEq.Preset> = eqPresetState
 
+    private val _fidelityResult = MutableStateFlow<FidelityScanner.FidelityResult?>(null)
+    val fidelityResult: StateFlow<FidelityScanner.FidelityResult?> = _fidelityResult
+
+    private val _fidelityScanError = MutableStateFlow<String?>(null)
+    val fidelityScanError: StateFlow<String?> = _fidelityScanError
+
+    private val _fidelityScanInProgress = MutableStateFlow<Long?>(null) // track id currently scanning
+    val fidelityScanInProgress: StateFlow<Long?> = _fidelityScanInProgress
+
     fun requestUsbPermission(deviceName: String) = usbAudioManager.requestPermission(deviceName)
+
+    /**
+     * Runs a full offline loudness/true-peak scan on [track] — see
+     * FidelityScanner's kdoc for what this does and doesn't cover yet
+     * (no fake-lossless detection or spectrogram in this pass).
+     */
+    fun scanFidelity(track: Track) {
+        _fidelityScanInProgress.value = track.id
+        _fidelityScanError.value = null
+        viewModelScope.launch {
+            try {
+                val result = fidelityScanner.scan(Uri.parse(track.sourceUri), track.format)
+                _fidelityResult.value = result
+            } catch (e: Exception) {
+                _fidelityScanError.value = e.message ?: "Scan failed"
+            } finally {
+                _fidelityScanInProgress.value = null
+            }
+        }
+    }
+
+    fun dismissFidelityResult() {
+        _fidelityResult.value = null
+        _fidelityScanError.value = null
+    }
 
     /**
      * Cycles Flat -> Warm -> Bright -> Flat. A full EQ editor screen

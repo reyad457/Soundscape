@@ -36,6 +36,7 @@ dependencies {
     implementation(project(":core-dsp"))
     implementation(project(":core-usb"))
     implementation(project(":core-network"))
+    implementation(project(":core-analysis"))
 
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.6")

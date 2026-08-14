@@ -1,6 +1,8 @@
 package com.soundscape.app.ui.home
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -15,15 +17,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.soundscape.analysis.FidelityScanner
 import com.soundscape.app.ui.nowplaying.NowPlayingBar
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun HomeScreen(viewModel: HomeViewModel = hiltViewModel()) {
     val tracks by viewModel.tracks.collectAsState()
     val playback by viewModel.playback.collectAsState()
     val usbDevices by viewModel.usbDevices.collectAsState()
     val eqPreset by viewModel.activeEqPreset.collectAsState()
+    val fidelityResult by viewModel.fidelityResult.collectAsState()
+    val fidelityScanError by viewModel.fidelityScanError.collectAsState()
+    val scanningTrackId by viewModel.fidelityScanInProgress.collectAsState()
 
     Scaffold(
         topBar = {
@@ -73,15 +79,58 @@ fun HomeScreen(viewModel: HomeViewModel = hiltViewModel()) {
                         headlineContent = { Text(track.title) },
                         supportingContent = { Text("${track.artist} — ${track.album}") },
                         trailingContent = {
-                            Text(track.format.name, style = MaterialTheme.typography.labelSmall)
+                            if (scanningTrackId == track.id) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                            } else {
+                                Text(track.format.name, style = MaterialTheme.typography.labelSmall)
+                            }
                         },
-                        modifier = Modifier.clickable { viewModel.play(track) }
+                        modifier = Modifier.combinedClickable(
+                            onClick = { viewModel.play(track) },
+                            // Phase 4 minimal hook: long-press to run a fidelity
+                            // scan, same "just enough UI to test it" scope as
+                            // Phase 1's USB banner and Phase 3's preset button.
+                            // A dedicated per-track details screen is future UI work.
+                            onLongClick = { viewModel.scanFidelity(track) }
+                        )
                     )
                     HorizontalDivider()
                 }
             }
         }
     }
+
+    if (fidelityResult != null || fidelityScanError != null) {
+        FidelityResultDialog(
+            result = fidelityResult,
+            error = fidelityScanError,
+            onDismiss = { viewModel.dismissFidelityResult() }
+        )
+    }
+}
+
+@Composable
+private fun FidelityResultDialog(
+    result: FidelityScanner.FidelityResult?,
+    error: String?,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+        title = { Text("Fidelity Scan") },
+        text = {
+            if (error != null) {
+                Text(error)
+            } else if (result != null) {
+                Column {
+                    Text("Integrated loudness: %.1f LUFS".format(result.integratedLoudnessLufs))
+                    Text("Loudness range: %.1f LU".format(result.loudnessRangeLu))
+                    Text("True peak: %.1f dBTP".format(result.truePeakDbtp))
+                }
+            }
+        }
+    )
 }
 
 @Composable
