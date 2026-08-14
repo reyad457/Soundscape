@@ -37,6 +37,7 @@ class AAudioExclusiveEngine @Inject constructor(
     private var playbackJob: Job? = null
     private val mediaCodecDecoder = PcmDecoder(context)
     private val flacDecoder = FlacNativeDecoder(context)
+    private val alacDecoder = AlacNativeDecoder(context)
 
     private val _state = MutableStateFlow(PlaybackState())
     override val state: StateFlow<PlaybackState> = _state
@@ -60,7 +61,6 @@ class AAudioExclusiveEngine @Inject constructor(
                                  // the remaining piece, tracked for the Phase 1 follow-up pass.
 
             val chunks = produce(capacity = 8) {
-                val useNativeFlac = track.format == AudioFormat.FLAC
                 val onFormat: (PcmDecoder.DecodedFormat) -> Unit = { format ->
                     val opened = AAudioBridge.openStream(
                         sampleRate = format.sampleRateHz,
@@ -79,18 +79,21 @@ class AAudioExclusiveEngine @Inject constructor(
                             isPlaying = opened,
                             activeSampleRateHz = actualRate.takeIf { r -> r > 0 },
                             activeBitDepth = if (format.actualEncodingIsFloat) 32 else 16,
-                            // FLAC via libFLAC is a stronger bit-perfect claim than MediaCodec's
-                            // best-effort float request — but the badge still requires exclusive
-                            // mode AND no resampling regardless of which decoder produced the PCM.
+                            // Native FLAC/ALAC decoders are a stronger bit-perfect claim than
+                            // MediaCodec's best-effort float request — but the badge still
+                            // requires exclusive mode AND no resampling regardless of decoder.
                             isBitPerfectConfirmed = exclusive && noResample && usbDevice != null
                         )
                     }
                 }
 
-                if (useNativeFlac) {
-                    flacDecoder.decode(uri = Uri.parse(track.uri), scope = this, onFormatKnown = onFormat)
-                } else {
-                    mediaCodecDecoder.decode(uri = Uri.parse(track.uri), scope = this, onFormatKnown = onFormat)
+                when (track.format) {
+                    AudioFormat.FLAC ->
+                        flacDecoder.decode(uri = Uri.parse(track.uri), scope = this, onFormatKnown = onFormat)
+                    AudioFormat.ALAC ->
+                        alacDecoder.decode(uri = Uri.parse(track.uri), scope = this, onFormatKnown = onFormat)
+                    else ->
+                        mediaCodecDecoder.decode(uri = Uri.parse(track.uri), scope = this, onFormatKnown = onFormat)
                 }
             }
 

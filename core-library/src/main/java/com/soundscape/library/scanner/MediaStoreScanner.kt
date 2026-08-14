@@ -89,6 +89,7 @@ class MediaStoreScanner @Inject constructor(
 
     private fun formatFromMime(mime: String?): AudioFormat = when (mime) {
         "audio/flac", "audio/x-flac" -> AudioFormat.FLAC
+        "audio/alac" -> AudioFormat.ALAC
         "audio/x-wav", "audio/wav" -> AudioFormat.WAV
         "audio/mpeg" -> AudioFormat.MP3
         "audio/mp4", "audio/aac" -> AudioFormat.AAC
@@ -96,6 +97,16 @@ class MediaStoreScanner @Inject constructor(
         "audio/opus" -> AudioFormat.OPUS
         else -> AudioFormat.UNKNOWN
     }
+    // Caveat (Phase 2 ALAC note): MediaStore's own MIME sniffing commonly
+    // reports .m4a files as "audio/mp4" regardless of whether the codec
+    // inside is AAC or ALAC — it doesn't parse the stsd atom the way
+    // MediaExtractor's per-track format does. Until this scanner is
+    // taught to peek at the container the way AlacNativeDecoder already
+    // does at play-time, some ALAC files will show up as AudioFormat.AAC
+    // here and get routed to the MediaCodec fallback path instead of the
+    // native ALAC decoder. Real fix: open each "audio/mp4" candidate with
+    // MediaExtractor during scan and check its actual track MIME — costs
+    // scan time, worth doing once Phase 2 needs to be reliable end to end.
 
     private fun android.database.Cursor.getIntOrNull(col: Int): Int? =
         if (isNull(col)) null else getInt(col)

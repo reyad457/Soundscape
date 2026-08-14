@@ -5,6 +5,7 @@ add_library(soundscape_audio SHARED
     oboe_engine.cpp
     jni_bridge.cpp
     flac_jni_decoder.cpp
+    alac_jni_decoder.cpp
     flac/src/bitmath.c
     flac/src/bitreader.c
     flac/src/cpu.c
@@ -16,9 +17,15 @@ add_library(soundscape_audio SHARED
     flac/src/md5.c
     flac/src/memory.c
     flac/src/stream_decoder.c
+    alac/ALACBitUtilities.c
+    alac/ALACDecoder.cpp
+    alac/EndianPortable.c
+    alac/ag_dec.c
+    alac/dp_dec.c
+    alac/matrix_dec.c
 )
 
-target_include_directories(soundscape_audio PRIVATE flac/include)
+target_include_directories(soundscape_audio PRIVATE flac/include alac)
 
 # libFLAC compiles with no config.h present (all HAVE_* / FLAC__HAS_OGG
 # checks fall back safely to "off" when undefined — see README for the
@@ -51,5 +58,7 @@ set_source_files_properties(
     flac/src/bitmath.c flac/src/bitreader.c flac/src/cpu.c flac/src/crc.c
     flac/src/fixed.c flac/src/float.c flac/src/format.c flac/src/lpc.c
     flac/src/md5.c flac/src/memory.c flac/src/stream_decoder.c
+    alac/ALACBitUtilities.c alac/ALACDecoder.cpp alac/EndianPortable.c
+    alac/ag_dec.c alac/dp_dec.c alac/matrix_dec.c
     PROPERTIES COMPILE_FLAGS "-w"
 )
