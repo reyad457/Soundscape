@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -22,6 +23,7 @@ fun HomeScreen(viewModel: HomeViewModel = hiltViewModel()) {
     val tracks by viewModel.tracks.collectAsState()
     val playback by viewModel.playback.collectAsState()
     val usbDevices by viewModel.usbDevices.collectAsState()
+    val eqPreset by viewModel.activeEqPreset.collectAsState()
 
     Scaffold(
         topBar = {
@@ -29,6 +31,15 @@ fun HomeScreen(viewModel: HomeViewModel = hiltViewModel()) {
                 TopAppBar(
                     title = { Text("Soundscape") },
                     actions = {
+                        // Phase 3 minimal hook: cycles EQ presets so the DSP
+                        // chain is actually testable end to end. A real
+                        // per-band editor screen is future UI work — see
+                        // HomeViewModel.cycleEqPreset's kdoc.
+                        TextButton(onClick = { viewModel.cycleEqPreset() }) {
+                            Icon(Icons.Filled.Tune, contentDescription = "Cycle EQ preset")
+                            Spacer(Modifier.width(4.dp))
+                            Text(eqPreset.name.lowercase().replaceFirstChar { it.uppercase() })
+                        }
                         IconButton(onClick = { viewModel.rescanLibrary() }) {
                             Icon(Icons.Filled.Refresh, contentDescription = "Rescan library")
                         }

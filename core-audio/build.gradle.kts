@@ -44,6 +44,7 @@ android {
 dependencies {
     implementation(project(":core-usb")) // AAudioExclusiveEngine routes through UsbAudioManager
     implementation(project(":core-library")) // AudioFormat enum used to pick a decoder per track
+    implementation(project(":core-dsp")) // ParametricEq — EQ/crossfeed processing before writeFrames
 
     implementation("androidx.media3:media3-exoplayer:1.4.1")
     implementation("androidx.media3:media3-session:1.4.1")
