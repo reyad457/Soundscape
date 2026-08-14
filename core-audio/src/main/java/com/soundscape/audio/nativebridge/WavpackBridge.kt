@@ -21,7 +21,7 @@ class WavpackBridge(
      * opened, isn't lossless (see wavpack_jni_decoder.cpp — hybrid/lossy
      * .wv files deliberately fall back to MediaCodec instead), or errored.
      */
-    external fun decodeFd(fd: Int): Boolean
+    external fun decodeFd(fd: Int, startPositionMs: Long): Boolean
 
     @Suppress("unused")
     private fun onFormatKnown(sampleRateHz: Int, channels: Int, bitsPerSample: Int) {

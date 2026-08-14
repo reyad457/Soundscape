@@ -17,7 +17,7 @@ class FlacBridge(
     }
 
     /** Blocks the calling thread until decode finishes or the stream errors out. */
-    external fun decodeFd(fd: Int): Boolean
+    external fun decodeFd(fd: Int, startPositionMs: Long): Boolean
 
     // Called from native code — see flac_jni_decoder.cpp's writeCallback/metadataCallback.
     @Suppress("unused")

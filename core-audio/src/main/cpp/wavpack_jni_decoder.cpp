@@ -79,7 +79,7 @@ extern "C" {
 
 JNIEXPORT jboolean JNICALL
 Java_com_soundscape_audio_nativebridge_WavpackBridge_decodeFd(
-    JNIEnv* env, jobject callbackObj, jint fd) {
+    JNIEnv* env, jobject callbackObj, jint fd, jlong startPositionMs) {
 
     FILE* file = fdopen(dup(fd), "rb");
     if (!file) {
@@ -110,6 +110,16 @@ Java_com_soundscape_audio_nativebridge_WavpackBridge_decodeFd(
         WavpackCloseFile(wpc);
         fclose(file);
         return JNI_FALSE;
+    }
+
+    if (startPositionMs > 0 && sampleRate > 0) {
+        auto targetSample = static_cast<int64_t>(
+            (static_cast<double>(startPositionMs) / 1000.0) * sampleRate
+        );
+        if (!WavpackSeekSample64(wpc, targetSample)) {
+            LOGE("WavpackSeekSample64 to %lld failed — continuing from wherever the decoder landed",
+                 static_cast<long long>(targetSample));
+        }
     }
 
     jclass cls = env->GetObjectClass(callbackObj);

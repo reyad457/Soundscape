@@ -10,13 +10,16 @@ import kotlinx.coroutines.channels.ProducerScope
  * (3-Clause BSD, see core-audio/src/main/cpp/ape/) — self-contained
  * stream like FLAC and WavPack, not a container-demux split like ALAC.
  * Same fd-driven shape and packing contract as [FlacNativeDecoder] and
- * [WavpackNativeDecoder].
+ * [WavpackNativeDecoder]. [startPositionMs] gives real seek via
+ * `CAPEDecompress::Seek` (block offset — Monkey's Audio's "block" is
+ * one sample-frame, so block offset per second equals the sample rate).
  */
 class ApeNativeDecoder(private val context: Context) {
 
     suspend fun decode(
         uri: Uri,
         scope: ProducerScope<PcmDecoder.DecodedChunk>,
+        startPositionMs: Long = 0,
         onFormatKnown: (PcmDecoder.DecodedFormat) -> Unit
     ) {
         val pfd = context.contentResolver.openFileDescriptor(uri, "r")
@@ -44,7 +47,7 @@ class ApeNativeDecoder(private val context: Context) {
                 }
             )
 
-            val ok = bridge.decodeFd(descriptor.fd)
+            val ok = bridge.decodeFd(descriptor.fd, startPositionMs)
             if (!ok) {
                 throw IllegalStateException(
                     "APE native decode failed — see Logcat SoundscapeApe tag"

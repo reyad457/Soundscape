@@ -20,12 +20,18 @@ import kotlin.coroutines.resume
  * format branch OboeEngine::open() takes for bitsPerSample > 16), since
  * that's the width AAudio's exclusive-mode path actually negotiates
  * cleanly across DAC drivers.
+ *
+ * [startPositionMs] gives real seek: FLAC__stream_decoder_seek_absolute
+ * needs an absolute sample number, so the native side reads STREAMINFO
+ * first (for the sample rate) before computing and seeking to the
+ * target — see flac_jni_decoder.cpp's decodeFd for the full sequence.
  */
 class FlacNativeDecoder(private val context: Context) {
 
     suspend fun decode(
         uri: Uri,
         scope: ProducerScope<PcmDecoder.DecodedChunk>,
+        startPositionMs: Long = 0,
         onFormatKnown: (PcmDecoder.DecodedFormat) -> Unit
     ) {
         val pfd = context.contentResolver.openFileDescriptor(uri, "r")
@@ -56,7 +62,7 @@ class FlacNativeDecoder(private val context: Context) {
                     }
                 )
 
-                bridge.decodeFd(descriptor.fd) // blocks the coroutine's IO-dispatcher thread until EOF/error
+                bridge.decodeFd(descriptor.fd, startPositionMs) // blocks until EOF/error
                 cont.resume(Unit)
             }
         }

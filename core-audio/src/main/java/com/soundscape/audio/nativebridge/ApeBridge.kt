@@ -17,7 +17,7 @@ class ApeBridge(
     }
 
     /** Blocks until decode finishes or the stream errors out. */
-    external fun decodeFd(fd: Int): Boolean
+    external fun decodeFd(fd: Int, startPositionMs: Long): Boolean
 
     @Suppress("unused")
     private fun onFormatKnown(sampleRateHz: Int, channels: Int, bitsPerSample: Int) {

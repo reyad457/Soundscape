@@ -14,12 +14,18 @@ import kotlinx.coroutines.channels.ProducerScope
  * falls back to MediaCodec via [AAudioExclusiveEngine]'s normal fallback
  * — "bit-perfect where the format can honestly claim it" applies here
  * exactly like everywhere else in this app.
+ *
+ * [startPositionMs] gives real seek via `WavpackSeekSample64` — unlike
+ * FLAC, WavPack's sample rate is available immediately after opening
+ * (no metadata-read step needed first), so the native side seeks before
+ * ever reporting the format back to Kotlin.
  */
 class WavpackNativeDecoder(private val context: Context) {
 
     suspend fun decode(
         uri: Uri,
         scope: ProducerScope<PcmDecoder.DecodedChunk>,
+        startPositionMs: Long = 0,
         onFormatKnown: (PcmDecoder.DecodedFormat) -> Unit
     ) {
         val pfd = context.contentResolver.openFileDescriptor(uri, "r")
@@ -47,7 +53,7 @@ class WavpackNativeDecoder(private val context: Context) {
                 }
             )
 
-            val ok = bridge.decodeFd(descriptor.fd)
+            val ok = bridge.decodeFd(descriptor.fd, startPositionMs)
             if (!ok) {
                 throw IllegalStateException(
                     "WavPack native decode failed or file isn't lossless — see Logcat SoundscapeWavpack tag; " +

@@ -24,6 +24,9 @@ import javax.inject.Singleton
  * DAC (by actual device id — see [UsbDeviceResolver]) when
  * [UsbAudioManager] reports one with permission.
  *
+ * Every format now supports real seek (see [seekTo]) and true
+ * pause/resume without restarting the track (see [pause]/[resume]).
+ *
  * [PlaybackState.isBitPerfectConfirmed] is only ever set true when BOTH:
  *   1. AAudio actually granted Exclusive mode (not silently downgraded to Shared), AND
  *   2. the decoder's output sample rate matches the stream's opened rate exactly
@@ -103,7 +106,10 @@ class AAudioExclusiveEngine @Inject constructor(
 
                 when (track.format) {
                     AudioFormat.FLAC ->
-                        flacDecoder.decode(uri = Uri.parse(track.uri), scope = this, onFormatKnown = onFormat)
+                        flacDecoder.decode(
+                            uri = Uri.parse(track.uri), scope = this,
+                            startPositionMs = startPositionMs, onFormatKnown = onFormat
+                        )
                     AudioFormat.ALAC ->
                         alacDecoder.decode(
                             uri = Uri.parse(track.uri), scope = this,
@@ -111,7 +117,10 @@ class AAudioExclusiveEngine @Inject constructor(
                         )
                     AudioFormat.WAVPACK ->
                         try {
-                            wavpackDecoder.decode(uri = Uri.parse(track.uri), scope = this, onFormatKnown = onFormat)
+                            wavpackDecoder.decode(
+                                uri = Uri.parse(track.uri), scope = this,
+                                startPositionMs = startPositionMs, onFormatKnown = onFormat
+                            )
                         } catch (e: IllegalStateException) {
                             // Hybrid/lossy .wv files are rejected by design at the native layer
                             // (see wavpack_jni_decoder.cpp) — fall back immediately rather than
@@ -122,10 +131,14 @@ class AAudioExclusiveEngine @Inject constructor(
                             )
                         }
                     AudioFormat.APE ->
-                        apeDecoder.decode(uri = Uri.parse(track.uri), scope = this, onFormatKnown = onFormat)
+                        apeDecoder.decode(
+                            uri = Uri.parse(track.uri), scope = this,
+                            startPositionMs = startPositionMs, onFormatKnown = onFormat
+                        )
                     AudioFormat.DSF, AudioFormat.DFF ->
                         dsdDopDecoder.decode(
-                            uri = Uri.parse(track.uri), format = track.format!!, scope = this
+                            uri = Uri.parse(track.uri), format = track.format!!, scope = this,
+                            startPositionMs = startPositionMs
                         ) { outSampleRate, channels ->
                             val opened = AAudioBridge.openDopStream(outSampleRate, channels, usbDeviceId)
                             streamOpen = opened
@@ -190,16 +203,12 @@ class AAudioExclusiveEngine @Inject constructor(
     }
 
     override fun seekTo(positionMs: Long) {
-        // Real seek for the MediaCodec-backed formats (WAV/MP3/AAC/OGG/Opus)
-        // and ALAC (also MediaExtractor-based) — both accept a start position
-        // and call extractor.seekTo() before decoding begins. FLAC/WavPack/APE
-        // and DSD do NOT seek yet: each needs its own decoder-specific seek API
-        // wired through (FLAC__stream_decoder_seek_absolute, WavpackSeekSample64,
-        // CAPEDecompress::Seek, and a data-chunk byte-offset computation for DSD)
-        // — four more integration passes, not done in this one. Calling seekTo()
-        // on those formats currently just restarts the track from position 0;
-        // that's a real known limitation, not silent data corruption, so it's
-        // left as-is rather than blocked, but worth fixing before this is "done."
+        // Real seek now for every format: MediaCodec-backed formats and ALAC
+        // via MediaExtractor#seekTo, FLAC via FLAC__stream_decoder_seek_absolute,
+        // WavPack via WavpackSeekSample64, APE via CAPEDecompress::Seek, and DSD
+        // via a block/round-aligned byte skip into the data chunk (no decoder
+        // API needed there — DSD is raw, there's nothing to seek "within").
+        // See each *NativeDecoder's kdoc for the format-specific mechanism.
         val track = _state.value.currentTrack ?: return
         playInternal(track, startPositionMs = positionMs)
     }

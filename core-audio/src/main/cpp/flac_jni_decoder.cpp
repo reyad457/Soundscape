@@ -114,7 +114,7 @@ extern "C" {
 // readable fd, which WebDAV/SMB local caching can.
 JNIEXPORT jboolean JNICALL
 Java_com_soundscape_audio_nativebridge_FlacBridge_decodeFd(
-    JNIEnv* env, jobject callbackObj, jint fd) {
+    JNIEnv* env, jobject callbackObj, jint fd, jlong startPositionMs) {
 
     FILE* file = fdopen(dup(fd), "rb"); // dup: caller still owns/closes the original fd
     if (!file) {
@@ -138,7 +138,10 @@ Java_com_soundscape_audio_nativebridge_FlacBridge_decodeFd(
         return JNI_FALSE;
     }
 
-    FLAC__stream_decoder_set_md5_checking(ctx.decoder, true); // verify integrity, not just decode
+    // MD5 checking verifies the FULL decoded stream matches STREAMINFO's
+    // checksum — meaningless (and would spuriously warn) once we seek
+    // partway in, so only enable it for a from-the-start decode.
+    FLAC__stream_decoder_set_md5_checking(ctx.decoder, startPositionMs <= 0);
 
     FLAC__StreamDecoderInitStatus initStatus = FLAC__stream_decoder_init_FILE(
         ctx.decoder, file, writeCallback, metadataCallback, errorCallback, &ctx
@@ -152,7 +155,24 @@ Java_com_soundscape_audio_nativebridge_FlacBridge_decodeFd(
         return JNI_FALSE;
     }
 
-    bool ok = FLAC__stream_decoder_process_until_end_of_stream(ctx.decoder);
+    // Read STREAMINFO (triggers metadataCallback, giving us sample rate) before
+    // deciding the seek target — FLAC__stream_decoder_seek_absolute takes an
+    // absolute SAMPLE number, not a byte offset or time, so we need the rate first.
+    bool ok = FLAC__stream_decoder_process_until_end_of_metadata(ctx.decoder);
+
+    if (ok && startPositionMs > 0 && ctx.sampleRate > 0) {
+        auto targetSample = static_cast<FLAC__uint64>(
+            (static_cast<double>(startPositionMs) / 1000.0) * ctx.sampleRate
+        );
+        if (!FLAC__stream_decoder_seek_absolute(ctx.decoder, targetSample)) {
+            LOGW("FLAC seek to sample %llu failed — continuing from wherever the decoder landed",
+                 static_cast<unsigned long long>(targetSample));
+        }
+    }
+
+    if (ok) {
+        ok = FLAC__stream_decoder_process_until_end_of_stream(ctx.decoder);
+    }
     if (!ok) {
         LOGW("FLAC decode ended early (state: %s)",
              FLAC__StreamDecoderStateString[FLAC__stream_decoder_get_state(ctx.decoder)]);

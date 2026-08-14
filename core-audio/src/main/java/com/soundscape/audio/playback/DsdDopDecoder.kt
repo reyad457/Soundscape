@@ -24,6 +24,12 @@ import java.io.InputStream
  * rather than the generic `openStream` path other formats use, since
  * DoP's marker bytes must survive bit-exact — see [DopPacker]'s kdoc
  * for the real-hardware-verification caveat that still applies here.
+ *
+ * [startPositionMs] gives real seek here too, and it's simpler than
+ * FLAC/WavPack/APE's decoder-API seeks: since DSD is raw (no frames to
+ * decode), seeking is just skipping the right number of bytes from the
+ * data chunk's start, block/round-aligned to DSF/DFF's respective
+ * interleaving so a seek never lands mid-block. See [decodeDsf]/[decodeDff].
  */
 class DsdDopDecoder(private val context: Context) {
 
@@ -33,6 +39,7 @@ class DsdDopDecoder(private val context: Context) {
         uri: Uri,
         format: AudioFormat,
         scope: ProducerScope<PcmDecoder.DecodedChunk>,
+        startPositionMs: Long = 0,
         onFormatKnown: (outputSampleRateHz: Int, channelCount: Int) -> Unit
     ) {
         val pfd = context.contentResolver.openFileDescriptor(uri, "r")
@@ -42,8 +49,8 @@ class DsdDopDecoder(private val context: Context) {
             val input = BufferedInputStream(java.io.FileInputStream(descriptor.fileDescriptor), 1 shl 16)
 
             when (format) {
-                AudioFormat.DSF -> decodeDsf(input, scope, onFormatKnown)
-                AudioFormat.DFF -> decodeDff(input, scope, onFormatKnown)
+                AudioFormat.DSF -> decodeDsf(input, scope, startPositionMs, onFormatKnown)
+                AudioFormat.DFF -> decodeDff(input, scope, startPositionMs, onFormatKnown)
                 else -> throw IllegalArgumentException("DsdDopDecoder called with non-DSD format $format")
             }
         }
@@ -52,6 +59,7 @@ class DsdDopDecoder(private val context: Context) {
     private suspend fun decodeDsf(
         input: InputStream,
         scope: ProducerScope<PcmDecoder.DecodedChunk>,
+        startPositionMs: Long,
         onFormatKnown: (Int, Int) -> Unit
     ) {
         val info = DsfParser.parseHeader(input)
@@ -60,6 +68,18 @@ class DsdDopDecoder(private val context: Context) {
         val packer = DopPacker(info.channelCount)
         val blockSize = info.blockSizePerChannel
         var bytesRemaining = info.dataChunkSize
+
+        if (startPositionMs > 0) {
+            // Target DSD bit position -> bytes-per-channel -> block-aligned
+            // (DSF's block-interleaved layout means we can only seek to a
+            // whole block-group boundary, not an arbitrary byte).
+            val targetBitsPerChannel = (startPositionMs / 1000.0) * info.sampleRateHz
+            val targetBytePerChannel = (targetBitsPerChannel / 8).toLong()
+            val blockIndex = targetBytePerChannel / blockSize
+            val skipBytes = blockIndex * blockSize * info.channelCount
+            skipFully(input, skipBytes)
+            bytesRemaining -= skipBytes
+        }
 
         while (bytesRemaining > 0 && scope.isActive) {
             val thisBlockSize = minOf(blockSize.toLong(), bytesRemaining).toInt()
@@ -80,6 +100,7 @@ class DsdDopDecoder(private val context: Context) {
     private suspend fun decodeDff(
         input: InputStream,
         scope: ProducerScope<PcmDecoder.DecodedChunk>,
+        startPositionMs: Long,
         onFormatKnown: (Int, Int) -> Unit
     ) {
         val info = DffParser.parseHeader(input)
@@ -90,6 +111,15 @@ class DsdDopDecoder(private val context: Context) {
         // round of channelCount bytes at a time and de-interleave into per-channel arrays.
         val roundBytes = blockSizeBytes - (blockSizeBytes % info.channelCount)
         var bytesRemaining = info.dataChunkSize
+
+        if (startPositionMs > 0) {
+            val targetBitsPerChannel = (startPositionMs / 1000.0) * info.sampleRateHz
+            var targetBytePerChannel = (targetBitsPerChannel / 8).toLong()
+            targetBytePerChannel -= targetBytePerChannel % 2 // even-align: DoP pairs 2 bytes per word
+            val skipBytes = targetBytePerChannel * info.channelCount
+            skipFully(input, skipBytes)
+            bytesRemaining -= skipBytes
+        }
 
         while (bytesRemaining > 0 && scope.isActive) {
             val thisRound = minOf(roundBytes.toLong(), bytesRemaining).toInt()
@@ -108,6 +138,15 @@ class DsdDopDecoder(private val context: Context) {
             val packed = packer.packToInt32(channelBlocks)
             val frameCount = packed.size / info.channelCount
             scope.send(PcmDecoder.DecodedChunk(packer.toBytes(packed), frameCount))
+        }
+    }
+
+    private fun skipFully(input: InputStream, count: Long) {
+        var remaining = count
+        while (remaining > 0) {
+            val skipped = input.skip(remaining)
+            if (skipped <= 0) break // EOF reached while skipping — leaves stream at end, next read will just produce nothing
+            remaining -= skipped
         }
     }
 

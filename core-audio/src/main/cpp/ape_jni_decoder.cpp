@@ -81,7 +81,7 @@ extern "C" {
 
 JNIEXPORT jboolean JNICALL
 Java_com_soundscape_audio_nativebridge_ApeBridge_decodeFd(
-    JNIEnv* env, jobject callbackObj, jint fd) {
+    JNIEnv* env, jobject callbackObj, jint fd, jlong startPositionMs) {
 
     FILE* file = fdopen(dup(fd), "rb");
     if (!file) {
@@ -109,6 +109,17 @@ Java_com_soundscape_audio_nativebridge_ApeBridge_decodeFd(
     const int sampleRate = static_cast<int>(apeInfo.GetInfo(APE_INFO_SAMPLE_RATE));
     const int channels = static_cast<int>(apeInfo.GetInfo(APE_INFO_CHANNELS));
     const int bitsPerSample = static_cast<int>(apeInfo.GetInfo(APE_INFO_BITS_PER_SAMPLE));
+
+    if (startPositionMs > 0 && sampleRate > 0) {
+        // Monkey's Audio's "block" == one sample-frame (one sample across all
+        // channels), so block offset per second == sample rate directly.
+        int targetBlock = static_cast<int>((static_cast<double>(startPositionMs) / 1000.0) * sampleRate);
+        int seekResult = decompress.Seek(targetBlock);
+        if (seekResult != ERROR_SUCCESS) {
+            LOGE("CAPEDecompress::Seek(%d) failed, code %d — continuing from wherever the decoder landed",
+                 targetBlock, seekResult);
+        }
+    }
 
     jclass cls = env->GetObjectClass(callbackObj);
     jmethodID onFormatKnown = env->GetMethodID(cls, "onFormatKnown", "(III)V");
