@@ -12,3 +12,4 @@
 -keep class com.soundscape.audio.nativebridge.FlacBridge { *; }
 -keep class com.soundscape.audio.nativebridge.AlacBridge { *; }
 -keep class com.soundscape.audio.nativebridge.WavpackBridge { *; }
+-keep class com.soundscape.audio.nativebridge.ApeBridge { *; }

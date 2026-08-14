@@ -91,6 +91,7 @@ class MediaStoreScanner @Inject constructor(
         "audio/flac", "audio/x-flac" -> AudioFormat.FLAC
         "audio/alac" -> AudioFormat.ALAC
         "audio/x-wavpack", "audio/wavpack" -> AudioFormat.WAVPACK
+        "audio/x-ape", "audio/ape" -> AudioFormat.APE
         "audio/x-wav", "audio/wav" -> AudioFormat.WAV
         "audio/mpeg" -> AudioFormat.MP3
         "audio/mp4", "audio/aac" -> AudioFormat.AAC

@@ -7,6 +7,7 @@ add_library(soundscape_audio SHARED
     flac_jni_decoder.cpp
     alac_jni_decoder.cpp
     wavpack_jni_decoder.cpp
+    ape_jni_decoder.cpp
     flac/src/bitmath.c
     flac/src/bitreader.c
     flac/src/cpu.c
@@ -34,9 +35,25 @@ add_library(soundscape_audio SHARED
     wavpack/src/unpack_floats.c
     wavpack/src/unpack_seek.c
     wavpack/src/unpack_utils.c
+    ape/APEDecompress.cpp
+    ape/APEInfo.cpp
+    ape/APEHeader.cpp
+    ape/APETag.cpp
+    ape/UnBitArray.cpp
+    ape/UnBitArrayBase.cpp
+    ape/NewPredictor.cpp
+    ape/NNFilter.cpp
+    ape/Prepare.cpp
+    ape/CharacterHelper.cpp
+    ape/CircleBuffer.cpp
+    ape/GlobalFunctions.cpp
+    ape/MACUtils.cpp
+    ape/Assembly/common.cpp
 )
 
-target_include_directories(soundscape_audio PRIVATE flac/include alac wavpack/include wavpack/src)
+target_include_directories(soundscape_audio PRIVATE
+    flac/include alac wavpack/include wavpack/src ape ape/Assembly .
+)
 
 # libFLAC compiles with no config.h present (all HAVE_* / FLAC__HAS_OGG
 # checks fall back safely to "off" when undefined — see README for the
@@ -75,5 +92,9 @@ set_source_files_properties(
     wavpack/src/open_utils.c wavpack/src/open_filename.c wavpack/src/read_words.c
     wavpack/src/unpack.c wavpack/src/unpack_floats.c wavpack/src/unpack_seek.c
     wavpack/src/unpack_utils.c
+    ape/APEDecompress.cpp ape/APEInfo.cpp ape/APEHeader.cpp ape/APETag.cpp
+    ape/UnBitArray.cpp ape/UnBitArrayBase.cpp ape/NewPredictor.cpp ape/NNFilter.cpp
+    ape/Prepare.cpp ape/CharacterHelper.cpp ape/CircleBuffer.cpp
+    ape/GlobalFunctions.cpp ape/MACUtils.cpp ape/Assembly/common.cpp
     PROPERTIES COMPILE_FLAGS "-w"
 )

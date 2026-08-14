@@ -39,6 +39,7 @@ class AAudioExclusiveEngine @Inject constructor(
     private val flacDecoder = FlacNativeDecoder(context)
     private val alacDecoder = AlacNativeDecoder(context)
     private val wavpackDecoder = WavpackNativeDecoder(context)
+    private val apeDecoder = ApeNativeDecoder(context)
 
     private val _state = MutableStateFlow(PlaybackState())
     override val state: StateFlow<PlaybackState> = _state
@@ -102,6 +103,8 @@ class AAudioExclusiveEngine @Inject constructor(
                             // waiting on PlaybackEngineRouter's 2s exclusive-mode timeout.
                             mediaCodecDecoder.decode(uri = Uri.parse(track.uri), scope = this, onFormatKnown = onFormat)
                         }
+                    AudioFormat.APE ->
+                        apeDecoder.decode(uri = Uri.parse(track.uri), scope = this, onFormatKnown = onFormat)
                     else ->
                         mediaCodecDecoder.decode(uri = Uri.parse(track.uri), scope = this, onFormatKnown = onFormat)
                 }
